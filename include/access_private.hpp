@@ -35,7 +35,8 @@ namespace access_private {
     Ptr ptr;
 
     template<class Other>
-      requires (std::is_base_of_v<Class, Other> || std::is_base_of_v<Other, Class>)
+      requires (std::is_base_of_v<std::remove_pointer_t<std::remove_reference_t<Class>>, Other> ||
+        std::is_base_of_v<Other, std::remove_pointer_t<std::remove_reference_t<Class>>>)
     memptr<Ptr, Res, Other, Noexcept, Vararg, Args...> with_type() const noexcept {
       return {ptr};
     }
@@ -269,10 +270,10 @@ MEM_PTR_GETTER_CV(&&,&&)
   template<static_string S, class ...Args>
   struct accessor_t;
 
-  template<class ... Args>
-  struct accessor_t<"", Args...> {
-    constexpr static bool always_false = sizeof...(Args) != sizeof...(Args);
-    static_assert(always_false, "Cannot able to recognize the type name. Please use the overloaded access");
+  template<static_string S, class ... Args>
+    requires(S == static_string{""})
+  struct accessor_t<S, Args...> {
+    static_assert(S.arr.size() > 1, "Cannot able to recognize the type name. Please use the overloaded access");
   };
 
 #if not defined(__clang__) and defined(__GNUC__)
@@ -305,14 +306,14 @@ MEM_PTR_GETTER_CV(&&,&&)
       return std::invoke(get(accessor_t<S, First &&, Ts...>{}), std::forward<First>(f), std::forward<Ts>(ts)...);
     }
 
+    /*
     template<class First, class ...Ts>
       requires(std::is_pointer_v<std::remove_reference_t<First>> &&
         !std::is_same_v<std::remove_pointer_t<std::remove_reference_t<First>>,
-        typename decltype(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})})::class_type> &&
-      type_name<typename decltype(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})})::class_type>().size() > 1)
+        typename decltype(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})})::class_type>)
     constexpr decltype(auto) operator()(First f, Ts &&... ts) const
     noexcept(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})}.is_noexcept &&
-      memptr{get(accessor_t<type_name<typename decltype(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})})::class_type>(), std::remove_reference_t<First>>{})}.is_noexcept)
+      memptr{get(accessor_t<":conv", typename decltype(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})})::class_type, std::remove_reference_t<First>>{})}.is_noexcept)
     {
       return std::invoke(get(accessor_t<S, std::remove_reference_t<First>, Ts...>{}),
         accessor_t<type_name<typename decltype(memptr{get(accessor_t<S, std::remove_reference_t<First>, Ts...>{})})::class_type>(), std::remove_reference_t<First>>{}(std::forward<First>(f)),
@@ -322,8 +323,7 @@ MEM_PTR_GETTER_CV(&&,&&)
     template<class First, class ...Ts>
       requires(std::is_class_v<std::remove_reference_t<First>> &&
         !std::is_same_v<std::remove_reference_t<First>,
-        typename decltype(memptr{get(accessor_t<S, First &&, Ts...>{})})::class_type> &&
-      type_name<typename decltype(memptr{get(accessor_t<S, First &&, Ts...>{})})::class_type>().size() > 1)
+        typename decltype(memptr{get(accessor_t<S, First &&, Ts...>{})})::class_type>)
     constexpr decltype(auto) operator()(First f, Ts &&... ts) const
       noexcept(memptr{get(accessor_t<S, First &&, Ts...>{})}.is_noexcept &&
         memptr{get(accessor_t<type_name<typename decltype(memptr{get(accessor_t<S, First &&, Ts...>{})})::class_type>(), First &&>{})}.is_noexcept)
@@ -331,7 +331,7 @@ MEM_PTR_GETTER_CV(&&,&&)
       return std::invoke(get(accessor_t<S, First &&, Ts...>{}),
       accessor_t<type_name<typename decltype(memptr{get(accessor_t<S, First &&, Ts...>{})})::class_type>(), First &&>{}(std::forward<First>(f)),
         std::forward<Ts>(ts)...);
-    }
+    }*/
 
     template<class First, class ...Ts>
     requires(sizeof...(Ts) > 0 &&
@@ -344,7 +344,7 @@ MEM_PTR_GETTER_CV(&&,&&)
   };
 
   template<static_string S, class A, class ...Args>
-    requires(S != static_string{""} && std::is_reference_v<A>)
+    requires(S != static_string{""} && S != static_string{":conv"} && std::is_reference_v<A>)
   struct accessor_t<S, A, Args...> : accessor_t<S> {
     friend constexpr auto get(accessor_t);
 
@@ -362,7 +362,7 @@ MEM_PTR_GETTER_CV(&&,&&)
   };
 
   template<static_string S, class A, class ...Args>
-    requires(S != static_string{""} && std::is_pointer_v<std::remove_reference_t<A>>)
+    requires(S != static_string{""} && S != static_string{":conv"} && std::is_pointer_v<std::remove_reference_t<A>>)
   struct accessor_t<S, A, Args...> :
         accessor_t<S, std::remove_pointer_t<A>&, Args...>,
         accessor_t<S, std::remove_pointer_t<A>&&, Args...> {
@@ -372,7 +372,7 @@ MEM_PTR_GETTER_CV(&&,&&)
       if constexpr (std::is_member_pointer_v<decltype(get(accessor_t{}))>)
         return get(accessor_t{});
       else
-        return +[] (std::remove_pointer_t<A>& this_, Args&& ... args) {
+        return +[] (std::remove_pointer_t<A>& this_, Args&& ... args) -> decltype(auto) {
           return std::invoke(get(accessor_t{}), std::addressof(this_), std::forward<Args>(args)...);
         };
     }
@@ -381,7 +381,7 @@ MEM_PTR_GETTER_CV(&&,&&)
       if constexpr (std::is_member_pointer_v<decltype(get(accessor_t{}))>)
         return get(accessor_t{});
       else
-        return +[] (std::remove_pointer_t<A> &&this_, Args&& ... args) {
+        return +[] (std::remove_pointer_t<A> &&this_, Args&& ... args) -> decltype(auto) {
           return std::invoke(get(accessor_t{}), std::addressof(this_), std::forward<Args>(args)...);
         };
     }
@@ -400,7 +400,7 @@ MEM_PTR_GETTER_CV(&&,&&)
   };
 
   template<static_string S, class Base>
-    requires(S != static_string{""} && std::is_class_v<Base>)
+    requires(S != static_string{""} && S != static_string{":conv"} && std::is_class_v<Base>)
   struct accessor_t<S, Base> {
     friend constexpr auto get(accessor_t);
 
@@ -433,7 +433,7 @@ MEM_PTR_GETTER_CV(&&,&&)
 
 
   template<static_string S, class Base, class ...Args>
-    requires(S != static_string{""} && std::is_class_v<Base> && sizeof...(Args) > 0)
+    requires(S != static_string{""} && S != static_string{":conv"} && std::is_class_v<Base> && sizeof...(Args) > 0)
   struct accessor_t<S, Base, Args...> {
     friend constexpr auto get(accessor_t);
 
@@ -447,6 +447,20 @@ MEM_PTR_GETTER_CV(&&,&&)
     {
       return accessor_t{}(std::forward<Args>(args)...);
     }
+  };
+
+
+  template<class Res>
+  struct accessor_t<static_string{":conv"}, Res> {
+    friend constexpr auto get(accessor_t);
+
+
+  };
+
+  template<class Res, class Base>
+    // requires(std::is_pointer_v<Base>)
+  struct accessor_t<static_string{":conv"}, Res, Base>
+    : accessor_t<static_string{":conv"}, Res> {
   };
 
 #if not defined(__clang__) and defined(__GNUC__)
@@ -470,10 +484,17 @@ MEM_PTR_GETTER_CV(&&,&&)
             auto str> requires(std::is_pointer_v<Class>)
   struct access_impl<T, void, memptr<Ptr, Res, Class, noexc, varg, Args...>, str> :
       accessor_t<str, Class, Args...> {
-    using rptr = std::remove_pointer_t<Class>;
     friend constexpr auto get(accessor_t<str, Class, Args...>) { return memptr{+T}.ptr; }
   };
 
+  template<auto T, class Ptr, class Res, class Class, bool noexc, bool varg>
+  struct access_impl<T, void, memptr<Ptr, Res, Class, noexc, varg>, static_string{":conv"}> :
+      accessor_t<static_string{":conv"},
+        std::conditional_t<std::same_as<decltype(T), decltype(+T)>, Res, std::remove_pointer_t<Res>>
+        , Class> {
+    friend constexpr auto get(accessor_t<static_string{":conv"},
+      std::conditional_t<std::same_as<decltype(T), decltype(+T)>, Res, std::remove_pointer_t<Res>>, Class>) { return memptr{+T}.ptr; }
+  };
 
   template<auto T, class Ptr, class Res, class Class,
             auto str> requires(std::is_class_v<Class>)
@@ -496,7 +517,7 @@ MEM_PTR_GETTER_CV(&&,&&)
     friend constexpr auto get(accessor_t<str, Base, Args...>) { return freeptr{+T}.ptr; }
   };
 
-  template<auto T, class = void, static_string = "">
+  template<auto T, class = void>
   struct access;
 
   template<auto T, class Res = typename decltype(memptr{T})::res_type,
@@ -509,11 +530,10 @@ MEM_PTR_GETTER_CV(&&,&&)
     decltype(memptr{T})::args == 0 && !decltype(memptr{T})::has_vararg &&
     !std::is_void_v<Res> &&
 #if not defined(__clang__) && defined(__GNUC__)
-    static_string{N} == static_string{"__conv_op"}
+    N == static_string{"__conv_op"}
 #else
     !is_operator<T, Res, N> &&
-    static_string{N} ==
-      static_string{type_name<Res>()}
+    N == static_string{type_name<Res>()}
 #endif
   ;
 
@@ -523,6 +543,8 @@ MEM_PTR_GETTER_CV(&&,&&)
   struct access<T> : access_impl<memptr{T}> {
   };
 
+  /*
+  // member / function with base/derived class
   template<auto T, class M>
     requires(requires { memptr{T}; } && !requires{ freeptr{T}; } && !is_conversion_op<T> && !is_operator<T> &&
     !std::is_void_v<M> &&
@@ -531,9 +553,9 @@ MEM_PTR_GETTER_CV(&&,&&)
     )
   struct access<T, M> : access_impl<memptr{T},
     void, decltype(memptr{T}.template with_type<M>())> {
-      static_assert(requires { accessor_t<type_name<typename decltype(memptr{T})::class_type>()>{}(static_cast<M*>(nullptr)); },
+      static_assert(requires { accessor_t<":conv", typename decltype(memptr{T})::class_type>{}(static_cast<M*>(nullptr)); },
         "Please add private_base class conversion");
-  };
+  };*/
 
   // operator
   template<auto T> requires(is_operator<T>)
@@ -542,17 +564,8 @@ MEM_PTR_GETTER_CV(&&,&&)
 
   // conversion operator
   template<auto T> requires(is_conversion_op<T>)
-  struct access<T> : access_impl<memptr{T}
-
-#if not defined(__clang__) && defined(__GNUC__)
-    , void, decltype(memptr{T}), type_name<typename decltype(memptr{T})::res_type>()
-#endif
+  struct access<T> : access_impl<memptr{T}, void, decltype(memptr{T}), static_string{":conv"}
   > {};
-
-  // conversion operator with unique name
-  template<auto T, static_string str> requires(requires { memptr{T}; } &&
-    is_conversion_op<T>)
-  struct access<T, void, str> : access_impl<memptr{T}, void, decltype(memptr{T}), str> {};
 
   // static member/function
   template<auto T, class V> requires(std::same_as<decltype(T), decltype(+T)> && requires { freeptr{T}; } &&
@@ -564,65 +577,39 @@ MEM_PTR_GETTER_CV(&&,&&)
   template<auto T, class V> requires(!std::same_as<decltype(T), decltype(+T)> &&
              !std::is_void_v<V> &&
              std::same_as<V, typename decltype(freeptr{+T})::res_type>)
-  struct access<T, V> : access_impl<T, V, decltype(freeptr{+T}),
-                                    static_string{"construct"}
-                                    > {
+  struct access<T, V> : access_impl<T, V, decltype(freeptr{+T}), static_string{":construct"}> {
   };
 
   // destruct_at
   template<auto T, class V> requires(!std::same_as<decltype(T), decltype(+T)> && !std::is_void_v<V> &&
              std::is_void_v<typename decltype(freeptr{+T})::res_type>)
-  struct access<T, V> : access_impl<T, V, decltype(freeptr{+T}),
-                                    static_string{'~', type_name<V>()}
-                                    > {
+  struct access<T, V> : access_impl<T, V, decltype(freeptr{+T}), static_string{":destruct_at"}> {
   };
-
-  // destruct_at with unique name
-  template<auto T, class V, static_string str> requires(!std::same_as<decltype(T), decltype(+T)> && !std::is_void_v<V> &&
-             std::is_void_v<typename decltype(freeptr{+T})::res_type>)
-  struct access<T, V, str> : access_impl<T, V, decltype(freeptr{+T}),
-                                    static_string{'~', str.arr}
-  > {};
 
   // construct_at
   template<auto T, class V> requires(!std::same_as<decltype(T), decltype(+T)> && !std::is_void_v<V> &&
              std::same_as<V &, typename decltype(freeptr{+T})::res_type>)
-  struct access<T, V> : access_impl<T, V, decltype(freeptr{+T}),
-                                    type_name<V>()
-                                    > {};
-
-  // construct_at with unique name
-  template<auto T, class V, static_string str> requires(!std::same_as<decltype(T), decltype(+T)> && !std::is_void_v<V> &&
-             std::same_as<V &, typename decltype(freeptr{+T})::res_type>)
-  struct access<T, V, str> : access_impl<T, V, decltype(freeptr{+T}), str
-                                    > {};
+  struct access<T, V> : access_impl<T, V, decltype(freeptr{+T}), static_string{":construct_at"}> {};
 
   // base class conversion
   template<auto T> requires(!std::same_as<decltype(T), decltype(+T)> &&
              std::is_pointer_v<typename decltype(freeptr{+T})::res_type> && requires { memptr{+T}; })
-  struct access<T, void> : access_impl<T, void, decltype(memptr{+T}),
-                                   type_name<std::remove_pointer_t<typename decltype(freeptr{+T})::res_type>>()
-                                    > {
+  struct access<T> : access_impl<T, void, decltype(memptr{+T}), static_string{":conv"}> {
   };
-
-  // base class conversion with unique name
-  template<auto T, static_string str> requires(!std::same_as<decltype(T), decltype(+T)> &&
-             std::is_pointer_v<typename decltype(freeptr{+T})::res_type> && requires { memptr{+T}; })
-  struct access<T, void, str> : access_impl<T, void, decltype(memptr{+T}), str> {};
 
   // default or specific arguments
   template<auto T, static_string S, class V = void>
   struct unique_access;
   template<auto T, static_string S>
     requires(std::is_member_object_pointer_v<decltype(T)>)
-  struct unique_access<T, S, void> : access_impl<memptr{T}, void,
+  struct unique_access<T, S> : access_impl<memptr{T}, void,
                                                  decltype(memptr{T}), S
                                                  > {
   };
 
   template<auto T, static_string S>
     requires(!std::same_as<decltype(T), decltype(+T)> && requires { memptr{+T}; })
-  struct unique_access<T, S, void> : access_impl<T, void,
+  struct unique_access<T, S> : access_impl<T, void,
                                                  decltype(memptr{+T}), S
                                                  > {
   };

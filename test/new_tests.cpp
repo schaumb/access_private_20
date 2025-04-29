@@ -116,14 +116,18 @@ class ops_x {
   constexpr void operator[](const ops&) const noexcept {}
   constexpr const ops* operator->() const noexcept { return nullptr; }
   explicit operator A() const noexcept { return A{}; }
-  explicit operator A&&() const noexcept { static A a; return std::move(a); }
+  explicit operator A&&() const && noexcept { static A a; return std::move(a); }
 };
 
-class Base {
+class BaseOfBase {};
+
+class Base : BaseOfBase {
   int *member;
 };
 
-class Derived : Base {};
+class OtherBase {};
+
+class Derived : Base, OtherBase {};
 
 namespace access_private {
   using ops = ops_x;
@@ -175,9 +179,7 @@ namespace access_private {
   template struct access<(&ops::operator->)>;
 
   template struct access<&ops::operator A>;
-  template struct access<&ops::operator A, void, "conv_to_a">;
-  // template struct access<&ops::operator A&&>;
-  template struct access<&ops::operator A&&, void, "conv_to_a&&">;
+  template struct access<&ops::operator A&&>;
 
   // access member variable
   template struct access<&A::a>;
@@ -255,13 +257,9 @@ namespace access_private {
 
   // construction and destruction
   template struct access<constructing_at(C), C>;
-  // same with rename
-  template struct access<constructing_at(C), C, "MYC">;
 
   template struct access<constructing_at(C, const C&), C>;
   template struct access<destructing_at(C), C>;
-  // same with rename
-  template struct access<destructing_at(C), C, "MYC">;
 
   // unique parameters and default parameters
   call_member_function_with(A, def, unsigned int);
@@ -276,7 +274,6 @@ namespace access_private {
 #endif
 
   template struct access<private_base(B, A)>;
-  template struct access<private_base(B, A), void, "renamed">;
 
 #ifndef __clang__
   lambda_member_accessor(decltype(lambda), a);
@@ -287,17 +284,19 @@ namespace access_private {
 
   using BaseType = type_accessor_at<"member">; // Base
   template struct access<private_base(Derived, BaseType)>;
+  template struct access<private_base(Derived, OtherBase)>;
+  template struct access<private_base(BaseType, BaseOfBase)>;
   // only works with private base enabled.
-  template struct access<&Derived::member, Derived>;
+  // template struct access<&Derived::member, Derived>;
 
   constexpr decltype(auto) call(accessor_t<"y", B>, int, float);
 }
 
 #ifndef _MSC_VER // no constructor at MSVC
-constinit B cxa{access_private::accessor<"construct", B>()};
+constinit B cxa{access_private::accessor<":construct", B>()};
 
 #ifdef __clang__ // constexpr base class conversion only works at clang
-constinit A* cxtoB = access_private::accessor<"A">(&cxa);
+constinit A* cxtoB = access_private::accessor<":conv", A>(&cxa);
 #endif
 #endif
 
@@ -311,8 +310,8 @@ int main() {
   using namespace access_private;
 
   Derived d{};
-  auto*& m = accessor<"member">(d);
-  auto*& m2 = accessor<"member">(&d);
+  //auto*& m = accessor<"member">(d);
+  //auto*& m2 = accessor<"member">(&d);
 
   A a;
   auto& aa = accessor<"a">(&a);
@@ -365,9 +364,9 @@ int main() {
 
   B *xx{};
 #if not defined(_MSC_VER)
-  B X {accessor<"construct", B>()};
+  B X {accessor<":construct", B>()};
   xx = &X;
-  B X2 = accessor<"construct", B>(1, 2.2);
+  B X2 = accessor<":construct", B>(1, 2.2);
 
   union U {
     char arr;
@@ -379,13 +378,13 @@ int main() {
   U u;
   U oth;
 
-  C& c = accessor<"MYC", C>(&u.c);
-  C& othC = accessor<"C", C>(&oth.c, std::as_const(c));
+  C& c = accessor<":construct_at", C>(&u.c);
+  C& othC = accessor<":construct_at", C>(&oth.c, std::as_const(c));
 
-  // C &&anoth {accessor<"construct">(std::as_const(c))}; // this will not work, because ~C is private
+  // C &&anoth {accessor<":construct">(std::as_const(c))}; // this will not work, because ~C is private
 
-  accessor<"~C", C>(othC);
-  accessor<"~MYC", C>(c);
+  accessor<":destruct_at", C>(othC);
+  accessor<":destruct_at", C>(c);
 
   accessor<"def">(a, 4u); // calls a.def(4) with second default argument
   accessor<"def2">(a);
@@ -399,17 +398,15 @@ int main() {
 #endif
 
   constexpr ops_x thisis = ops_x{};
-  A &&x1{accessor<"A">(thisis)};
-  A &&x2{accessor<"conv_to_a">(thisis)};
-  A &&x3{accessor<"conv_to_a&&">(thisis)};
+  A &&x1{accessor<":conv", A>(thisis)};
+  A &&x3{accessor<":conv", A&&>(thisis)};
   accessor<"+">(thisis);
   accessor<"+">(thisis, thisis);
   accessor<"++">(thisis);
   accessor<"++">(thisis, 0);
 
 
-  A* base = accessor<"A">(xx);
-  A* base2 = accessor<"renamed">(xx);
+  A* base = accessor<":conv", A>(xx);
 
 #ifndef __clang__
   int& ac = accessor<"a">(lambda);

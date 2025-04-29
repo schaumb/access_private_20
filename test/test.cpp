@@ -92,7 +92,7 @@ void test_access_private_const_member() {
   C c;
   auto &i = access_private::accessor<"m_i">(c);
   // should not deduce to int&
-  static_assert(std::is_same<const int &, decltype(i)>::value, "");
+  static_assert(std::is_same<const int &, decltype(i)>::value);
   ASSERT(i == 3);
 }
 
@@ -111,7 +111,7 @@ void test_access_private_const_object() {
   const CA ca;
   auto &i = access_private::accessor<"m_i">(ca);
   // should not deduce to int&
-  static_assert(std::is_same<const int &, decltype(i)>::value, "");
+  static_assert(std::is_same<const int &, decltype(i)>::value);
   ASSERT(i == 3);
 }
 
@@ -133,7 +133,7 @@ void test_access_private_template_field() {
 
 void test_access_private_constexpr() {
   constexpr A a;
-  static_assert(access_private::accessor<"m_i">(a) == 3, "");
+  static_assert(access_private::accessor<"m_i">(a) == 3);
 }
 
 namespace access_private {
@@ -175,7 +175,7 @@ namespace access_private {
 
 void test_call_private_constexpr() {
   constexpr A a;
-  static_assert(access_private::accessor<"m_cxf">(a, 5) == 15, "");
+  static_assert(access_private::accessor<"m_cxf">(a, 5) == 15);
 }
 
 namespace access_private {
@@ -196,7 +196,7 @@ namespace access_private {
 
 void test_access_private_static_const() {
   auto &i = access_private::accessor<"s_ci", A>();
-  static_assert(std::is_same<const int &, decltype(i)>::value, "");
+  static_assert(std::is_same<const int &, decltype(i)>::value);
   ASSERT(i == 403);
 }
 
@@ -205,7 +205,7 @@ namespace access_private {
 }
 
 void test_access_private_static_constexpr() {
-  static_assert(access_private::accessor<"s_cxi", A>() == 42, "");
+  static_assert(access_private::accessor<"s_cxi", A>() == 42);
 }
 
 namespace access_private {
@@ -234,7 +234,7 @@ namespace access_private {
 }
 
 void test_call_private_static_constexpr() {
-  static_assert(access_private::accessor<"s_cxf", A>(5) == 10, "");
+  static_assert(access_private::accessor<"s_cxf", A>(5) == 10);
 }
 
 class A3 {
@@ -281,9 +281,9 @@ namespace access_private {
 
 void test_call_private_overloaded_constexpr() {
   constexpr A3 a3;
-  static_assert(access_private::accessor<"m_cxf">(a3, 10) == 13, "");
+  static_assert(access_private::accessor<"m_cxf">(a3, 10) == 13);
   constexpr const char data[] = "hello world";
-  static_assert(access_private::accessor<"m_cxf">(a3, &*data) == data+3, "");
+  static_assert(access_private::accessor<"m_cxf">(a3, &*data) == data+3);
 }
 
 namespace access_private {
@@ -318,8 +318,8 @@ namespace access_private {
 }
 
 void test_call_private_overloaded_static_constexpr() {
-  static_assert(access_private::accessor<"s_cxf", A3>(3) == '3', "");
-  static_assert(*access_private::accessor<"s_cxf", A3>(0.5f) == '5', "");
+  static_assert(access_private::accessor<"s_cxf", A3>(3) == '3');
+  static_assert(*access_private::accessor<"s_cxf", A3>(0.5f) == '5');
 }
 
 
